@@ -1,22 +1,13 @@
+import os, sys, glob
+from uuid import uuid4
+from argparse import ArgumentParser
 import cv2
 import numpy as np
 from matplotlib import pyplot as plt
-import os
-import sys
-from uuid import uuid4
+
 
 def empty():
 	pass
-
-def progress(count, total, suffix=''):
-    bar_len = 60
-    filled_len = int(round(bar_len * count / float(total)))
-
-    percents = round(100.0 * count / float(total), 1)
-    bar = '=' * filled_len + '-' * (bar_len - filled_len)
-
-    sys.stdout.write('[%s] %s%s ...%s\r' % (bar, percents, '%', suffix))
-    sys.stdout.flush()
 
 def getContours(img,preprocessedImg, areaMin):
     '''
@@ -101,21 +92,14 @@ def intializeParameterWindow() :
     cv2.createTrackbar("Threshold2", "Parameters", 90, 255, empty)
     cv2.createTrackbar("AreaMin", "Parameters", 150000, 550000, empty)
 
-def processing():
+def processing(path):
     '''
     method for the processing
     '''
-    cap = cv2.VideoCapture(videoPath)
+    cap = cv2.VideoCapture(path)
     total = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
-    count = 0
 
-    while True:
-
-        count += 1
-
-        if verbose == 0:
-            # Print Progress
-            progress(count, total)
+    for i in tqdm(range(total)):
 
         # Read each frame
         sucess, img = cap.read()
@@ -138,27 +122,25 @@ def processing():
         # Get the contours
         boundingBox = getContours(imgDil, preprocessedImg, areaMin)
 
-        if collectData:
-
-            img_final[:,:,0] = img_final[:,:,0] * mask
-            img_final[:,:,1] = img_final[:,:,1] * mask
-            img_final[:,:,2] = img_final[:,:,2] * mask
+        img_final[:,:,0] = img_final[:,:,0] * mask
+        img_final[:,:,1] = img_final[:,:,1] * mask
+        img_final[:,:,2] = img_final[:,:,2] * mask
 
 
-            b_channel, g_channel, r_channel = cv2.split(img_final)
+        b_channel, g_channel, r_channel = cv2.split(img_final)
 
-            alpha_channel = (mask*255).astype(np.uint8)
+        alpha_channel = (mask*255).astype(np.uint8)
 
-            img_BGRA = cv2.merge((b_channel, g_channel, r_channel, alpha_channel))
+        img_BGRA = cv2.merge((b_channel, g_channel, r_channel, alpha_channel))
 
-            # Write the images to file
-            extract_write_image(
-                boundingBox["x"],
-                boundingBox["y"],
-                boundingBox["w"],
-                boundingBox["h"],
-                img_BGRA
-            )
+        # Write the images to file
+        extract_write_image(
+            boundingBox["x"],
+            boundingBox["y"],
+            boundingBox["w"],
+            boundingBox["h"],
+            img_BGRA
+        )
 
         if verbose == 2:
             # Display the images
@@ -204,45 +186,52 @@ def preprocessing_for_canny(img) :
 
     return preprocessedImg, imask
 
-def extract_write_image(x,y,w,h, imgFinal) :
+# def extract_write_image(x,y,w,h, imgFinal) :
 
-    extractImg = imgFinal[y:y+h,x:x+w]
+#     extractImg = imgFinal[y:y+h,x:x+w]
 
-    if collectData :
-        if not os.path.exists(outputPath):
-            os.makedirs(outputPath)
+#     if collectData :
+#         if not os.path.exists(outputPath):
+#             os.makedirs(outputPath)
 
-        imageName = uuid4()
-        cv2.imwrite(outputPath + '%d.png' % imageName, extractImg)
+#         imageName = uuid4()
+#         cv2.imwrite(outputPath + '%d.png' % imageName, extractImg)
 
-        if verbose == 1:
-            print(str(imageName) + ": " +  str(w) + " " + str(h) + " " + str(y+h) + " " + str(x+w))
+#         if verbose == 1:
+#             print(str(imageName) + ": " +  str(w) + " " + str(h) + " " + str(y+h) + " " + str(x+w))
 
 def main():
     if isChoseParameters:
         intializeParameterWindow()
-    processing()
+
+    for currency in tqdm(currencies):
+        for afile in tqdm(sorted(glob.glob('{}/videos/{}/*.MOV'.format(datafolder, currency)))):
+            print(afile)
+            processing(afile)
 
 if __name__ == "__main__" :
-    if len(sys.argv) != 5:
-       print("Please input the args as <video_path> <output_path> <collectData> <verbose>")
-       exit()
-    else:
-        # Script parameters
-        threshold1 = 26
-        threshold2 = 90
-        areaMin = 150000
 
-        collectData = bool(sys.argv[3])
-        verbose = int(sys.argv[4])
+    # parse arguments
+    parser = ArgumentParser()
+    parser.add_argument("-v", "-verbose", dest="verbose", default=0,
+                        help="control the output")
+    parser.add_argument("-isgreen", dest="isgreen", default=True,
+                        help="if screen is green")
+    parser.add_argument("-control", dest="control", default=False,
+                        help="control the parameters")
+    args = parser.parse_args()
 
-        videoPath = sys.argv[1]
-        outputPath = sys.argv[2]
 
-        isGreen = False
+    verbose = int(args.verbose)
+    isGreen = args.green
+    isChoseParameters = args.control
 
-        isChoseParameters = False
-        if verbose == 2:
-            isChoseParameters = True
+    # Script parameters
+    threshold1 = 26
+    threshold2 = 90
+    areaMin = 150000
+    datafolder = "data"
+    currencies = ["RM1","RM5","RM10","RM20","RM50","RM100"]
 
-        main()
+
+    main()
