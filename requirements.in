@@ -1,0 +1,7 @@
+opencv-python==4.1.2.30
+numpy
+tqdm
+pathlib
+Shapely
+imutils
+matplotlib
