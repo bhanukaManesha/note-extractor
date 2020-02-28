@@ -1,9 +1,12 @@
-import os, sys, glob
+
+import os, sys, glob, pathlib, imutils, shutil, json
+from tqdm import tqdm
 from uuid import uuid4
 from argparse import ArgumentParser
 import cv2
 import numpy as np
 from matplotlib import pyplot as plt
+from shapely.geometry import Polygon
 
 
 def empty():
@@ -92,7 +95,7 @@ def intializeParameterWindow() :
     cv2.createTrackbar("Threshold2", "Parameters", 90, 255, empty)
     cv2.createTrackbar("AreaMin", "Parameters", 150000, 550000, empty)
 
-def processing(path):
+def processing(path, currency, name):
     '''
     method for the processing
     '''
@@ -128,19 +131,17 @@ def processing(path):
 
 
         b_channel, g_channel, r_channel = cv2.split(img_final)
-
         alpha_channel = (mask*255).astype(np.uint8)
+        imgbgra = cv2.merge((b_channel, g_channel, r_channel, alpha_channel))
+        fimage = cv2.medianBlur(imgbgra, 5)
 
-        img_BGRA = cv2.merge((b_channel, g_channel, r_channel, alpha_channel))
+        # Generate the polygons
+        label = get_polygons(fimage)
 
         # Write the images to file
-        extract_write_image(
-            boundingBox["x"],
-            boundingBox["y"],
-            boundingBox["w"],
-            boundingBox["h"],
-            img_BGRA
-        )
+        with open('{}/images/{}/labels/{}.json'.format(datafolder,currency,name), 'w') as f:
+            json.dump(label, f)
+        cv2.imwrite('{}/images/{}/images/{}.png'.format(datafolder,currency,name), fimage)
 
         if verbose == 2:
             # Display the images
@@ -186,28 +187,68 @@ def preprocessing_for_canny(img) :
 
     return preprocessedImg, imask
 
-# def extract_write_image(x,y,w,h, imgFinal) :
 
-#     extractImg = imgFinal[y:y+h,x:x+w]
+def get_polygons(img):
+    img = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+    # find contours in the thresholded image
+    cnts = cv2.findContours(img.copy(), cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    cnts = imutils.grab_contours(cnts)
 
-#     if collectData :
-#         if not os.path.exists(outputPath):
-#             os.makedirs(outputPath)
+    # cnts = imutils.grab_contours(contours)
+    cnts = sorted(cnts, key = cv2.contourArea, reverse = True)[:10]
 
-#         imageName = uuid4()
-#         cv2.imwrite(outputPath + '%d.png' % imageName, extractImg)
+    cnt = cnts[0]
+    # print(cnt.shape)
+    points, _, _ = cnt.shape
 
-#         if verbose == 1:
-#             print(str(imageName) + ": " +  str(w) + " " + str(h) + " " + str(y+h) + " " + str(x+w))
+    ncnt = np.reshape(cnt, (points, 2))
+
+    polygon = Polygon(ncnt)
+
+    simplepolygon = polygon.simplify(1.0, preserve_topology=False)
+
+    if simplepolygon.type == 'MultiPolygon':
+        points = []
+        for polygon in simplepolygon:
+            subpoints = list(polygon.exterior.coords)
+            for subpoint in subpoints:
+                points.append(subpoint)
+
+    elif simplepolygon.type == 'Polygon':
+        points = list(simplepolygon.exterior.coords)
+
+    label = {
+        'points' : points
+    }
+
+    return label
+
 
 def main():
     if isChoseParameters:
         intializeParameterWindow()
 
-    for currency in tqdm(currencies):
+    for currency in currencies:
         for afile in tqdm(sorted(glob.glob('{}/videos/{}/*.MOV'.format(datafolder, currency)))):
-            print(afile)
-            processing(afile)
+            name = pathlib.Path(afile).stem
+            processing(afile,currency,name)
+
+def setup():
+
+    try:
+        # Remove the folder
+        shutil.rmtree("{}/images/".format(datafolder))
+    except FileNotFoundError:
+        print("Creating new folder.")
+
+    os.mkdir('{}/images'.format(datafolder))
+    for currency in currencies:
+        os.mkdir('{}/images/{}'.format(datafolder,currency))
+        os.mkdir('{}/images/{}/images'.format(datafolder,currency))
+        os.mkdir('{}/images/{}/labels'.format(datafolder,currency))
+
+
+
 
 if __name__ == "__main__" :
 
@@ -223,7 +264,7 @@ if __name__ == "__main__" :
 
 
     verbose = int(args.verbose)
-    isGreen = args.green
+    isGreen = args.isgreen
     isChoseParameters = args.control
 
     # Script parameters
@@ -233,5 +274,6 @@ if __name__ == "__main__" :
     datafolder = "data"
     currencies = ["RM1","RM5","RM10","RM20","RM50","RM100"]
 
+    setup()
 
     main()
