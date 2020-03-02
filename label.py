@@ -102,7 +102,7 @@ def processing(path, currency, name):
     cap = cv2.VideoCapture(path)
     total = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
 
-    for i in tqdm(range(total)):
+    for i in tqdm(range(0, total, 4)):
 
         # Read each frame
         sucess, img = cap.read()
@@ -123,7 +123,7 @@ def processing(path, currency, name):
         imgDil = cv2.dilate(imgCanny, kernal, iterations=1)
 
         # Get the contours
-        boundingBox = getContours(imgDil, preprocessedImg, areaMin)
+        # boundingBox = getContours(imgDil, preprocessedImg, areaMin)
 
         img_final[:,:,0] = img_final[:,:,0] * mask
         img_final[:,:,1] = img_final[:,:,1] * mask
@@ -139,9 +139,9 @@ def processing(path, currency, name):
         label = get_polygons(fimage)
 
         # Write the images to file
-        with open('{}/images/{}/labels/{}.json'.format(datafolder,currency,name), 'w') as f:
+        with open('{}/images/{}/labels/{}_{}.json'.format(datafolder,currency,name,i), 'w') as f:
             json.dump(label, f)
-        cv2.imwrite('{}/images/{}/images/{}.png'.format(datafolder,currency,name), fimage)
+        cv2.imwrite('{}/images/{}/images/{}_{}.png'.format(datafolder,currency,name,i), fimage)
 
         if verbose == 2:
             # Display the images
@@ -256,7 +256,7 @@ if __name__ == "__main__" :
     parser = ArgumentParser()
     parser.add_argument("-v", "-verbose", dest="verbose", default=0,
                         help="control the output")
-    parser.add_argument("-isgreen", dest="isgreen", default=True,
+    parser.add_argument("-isgreen", dest="isgreen", default=False,
                         help="if screen is green")
     parser.add_argument("-control", dest="control", default=False,
                         help="control the parameters")
